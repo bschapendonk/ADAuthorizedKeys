@@ -1,5 +1,5 @@
 # ADAuthorizedKeys
-OpenSSH AuthorizedKeysCommand for Active Directory Domain Services
+OpenSSH AuthorizedKeysCommand for Microsoft Windows Active Directory Domain Services
 
 ## WIP
 * [Topicus KeyHub: Connecting an Active Directory](https://files.topicus-keyhub.com/manual/manual-en-GB.html#_connecting_an_active_directory)
