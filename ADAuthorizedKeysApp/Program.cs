@@ -1,5 +1,9 @@
 ﻿using System;
 using System.DirectoryServices;
+using System.IO;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Text;
 
 namespace ADAuthorizedKeysApp
 {
@@ -11,13 +15,13 @@ namespace ADAuthorizedKeysApp
                 return;
 
             var username = args[0];
-            var splittedUsername = username.Split('\\');
-            if (splittedUsername.Length > 1)
-                username = splittedUsername[1];
+            var split = username.Split('\\');
+            if (split.Length > 1)
+                username = split[1];
 
-            splittedUsername = username.Split('@');
-            if (splittedUsername.Length > 1)
-                username = splittedUsername[0];
+            split = username.Split('@');
+            if (split.Length > 1)
+                username = split[0];
 
             // https://docs.microsoft.com/nl-nl/windows/win32/adschema/a-samaccountname
             // SAM-Account-Name attribute
@@ -30,16 +34,39 @@ namespace ADAuthorizedKeysApp
             if (username.IndexOfAny(new char[] { '/', '\\', '[', ']', ':', ';', '|', '=', ',', '+', '*', '?', '<', '>' }) != -1)
                 return;
 
-            var searcher = new DirectorySearcher();
-            searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
-            searcher.PropertiesToLoad.Add("sshPublicKeys");
-
-            var result = searcher.FindOne();
-            if (result != null)
+            var cache = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".adauthorizedkeys_cache");
+            if (!Directory.Exists(cache))
             {
-                foreach (string sshPublicKey in result.Properties["sshPublicKeys"])
+                var security = new DirectorySecurity();
+                security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User, FileSystemRights.FullControl, AccessControlType.Allow));
+
+                Directory.CreateDirectory(cache, security);
+            }
+
+            var file = Path.Combine(cache, username);
+
+            if (File.Exists(file) && (DateTime.UtcNow - File.GetLastWriteTimeUtc(file)).TotalMinutes <= 5)
+            {
+                Console.Write(File.ReadAllText(file));
+                return;
+            }
+
+            using (var searcher = new DirectorySearcher())
+            {
+                searcher.Filter = $"(&(objectClass=user)(sAMAccountName={username}))";
+                searcher.PropertiesToLoad.Add("sshPublicKeys");
+
+                var result = searcher.FindOne();
+                if (result != null)
                 {
-                    Console.Write(sshPublicKey);
+                    var builder = new StringBuilder();
+                    foreach (string sshPublicKey in result.Properties["sshPublicKeys"])
+                    {
+                        builder.AppendLine(sshPublicKey);
+                    }
+                    var keys = builder.ToString();
+                    File.WriteAllText(file, keys);
+                    Console.Write(keys);
                 }
             }
         }
